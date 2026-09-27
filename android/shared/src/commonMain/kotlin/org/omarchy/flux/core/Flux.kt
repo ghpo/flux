@@ -33,7 +33,7 @@ class Flux(private val dir: String, private val deviceName: String) {
     val local: LocalCertificate = LocalCertificate.loadOrCreate(dir)
     val trust: TrustStore = TrustStore(dir)
 
-    private val lock = Any()
+    private val lock = createLock()
     private val devices = LinkedHashMap<String, Device>()
     private var discovery: LanDiscovery? = null
     private var backend: LanBackend? = null
@@ -67,7 +67,7 @@ class Flux(private val dir: String, private val deviceName: String) {
             identity = ::identity,
             onLink = { attach(it) },
             trustedCertificate = { id -> trust.get(id)?.let { t -> runCatching { TrustStore.decodeCert(t.certificate) }.getOrNull() } },
-            hasLink = { id -> synchronized(lock) { devices[id]?.online == true } },
+            hasLink = { id -> lock.withLock { devices[id]?.online == true } },
             tcpPorts = tcpPorts,
         )
         backend = b
@@ -97,9 +97,9 @@ class Flux(private val dir: String, private val deviceName: String) {
         locked { devices.values.forEach { it.link?.close() } }
     }
 
-    fun snapshot(): List<DeviceUi> = synchronized(lock) { devices.values.map { it.snapshot() } }
+    fun snapshot(): List<DeviceUi> = lock.withLock { devices.values.map { it.snapshot() } }
 
-    fun device(id: String): Device? = synchronized(lock) { devices[id] }
+    fun device(id: String): Device? = lock.withLock { devices[id] }
 
     /** The TCP listener port, or 0 before [start]. */
     fun tcpPort(): Int = backend?.tcpPort ?: 0
@@ -110,7 +110,7 @@ class Flux(private val dir: String, private val deviceName: String) {
     }
 
     fun <T> locked(block: () -> T): T {
-        val r = synchronized(lock) { block() }
+        val r = lock.withLock { block() }
         onUpdate()
         return r
     }
