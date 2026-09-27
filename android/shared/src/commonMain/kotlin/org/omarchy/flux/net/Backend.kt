@@ -1,7 +1,6 @@
 package org.omarchy.flux.net
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
@@ -26,7 +25,7 @@ class LanBackend(
     var tcpPort = 0
         private set
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + blockingDispatcher)
     @Volatile private var running = false
     private var server: TcpServer? = null
 

@@ -1,7 +1,6 @@
 package org.omarchy.flux.net
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
@@ -20,7 +19,7 @@ class Link(
     val identity: Identity,
     val peerCertificate: ByteArray,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + blockingDispatcher)
     @Volatile private var closed = false
 
     /** Starts the read loop. [onPacket] runs on the reader coroutine. */

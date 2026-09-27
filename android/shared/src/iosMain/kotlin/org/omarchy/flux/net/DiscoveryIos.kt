@@ -14,7 +14,6 @@ import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
@@ -34,7 +33,7 @@ import platform.posix.socket
 private class IosLanDiscovery(private val listener: DiscoveryListener, private val port: Int) : LanDiscovery {
     private var fd: Int = -1
     @Volatile private var running = false
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + blockingDispatcher)
 
     override fun start(identityLine: () -> String) {
         if (running) return
