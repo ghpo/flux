@@ -21,6 +21,8 @@ notifications = true
 share_home = true
 pause_media_on_call = true
 sync_dnd = true
+allow_terminal = false
+terminal_session = "flux"
 gui = ""
 approve_timeout = 20
 
@@ -41,6 +43,8 @@ command = "omarchy-system-lock"
 | `share_home` | Let the phone browse the desktop home folder read-only. Defaults to `true`. |
 | `pause_media_on_call` | Pause desktop media during calls. Defaults to `true`. |
 | `sync_dnd` | Sync Do Not Disturb. Defaults to `true`. |
+| `allow_terminal` | Let a paired phone open a shared tmux terminal session on this computer. Off by default: it gives the phone a full shell with this user's privileges. |
+| `terminal_session` | The tmux session that the phone attaches to. An empty value uses `flux`. |
 | `gui` | Use `app`, `plugin`, or an empty value for automatic host selection. |
 | `approve_timeout` | Wait 5 to 120 seconds for approval. Zero or an omitted value uses 20 seconds. |
 | `commands` | Desktop commands available to the phone. A new configuration has no commands. |

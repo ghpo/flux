@@ -48,6 +48,13 @@ type Config struct {
 	// seconds, from 5 to 120. Zero means 20.
 	ApproveTimeout int       `toml:"approve_timeout,omitempty"`
 	Commands       []Command `toml:"commands"`
+	// AllowTerminal lets a paired phone open a shared terminal session on
+	// this computer through tmux. Off by default: it gives the phone a full
+	// shell with this user's privileges.
+	AllowTerminal bool `toml:"allow_terminal"`
+	// TerminalSession is the tmux session that the phone attaches to.
+	// Empty means "flux".
+	TerminalSession string `toml:"terminal_session,omitempty"`
 }
 
 // ConfigDir returns ~/.config/flux, or $XDG_CONFIG_HOME/flux.
