@@ -48,6 +48,7 @@ import platform.Security.SSLWrite
 import platform.Security.SecCertificateCopyData
 import platform.Security.SecCertificateCreateWithData
 import platform.Security.SecCertificateRef
+import platform.Security.SecIdentityCreate
 import platform.Security.SecIdentityRef
 import platform.Security.SecKeyCreateWithData
 import platform.Security.SecTrustCopyCertificateChain
