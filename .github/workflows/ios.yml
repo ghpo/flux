@@ -57,10 +57,18 @@ jobs:
             -derivedDataPath iosApp/build/device \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
-      - name: Upload the unsigned app
+      - name: Package the unsigned app into an IPA
+        working-directory: ${{ github.workspace }}
+        run: |
+          APP_DIR="iosApp/build/device/Build/Products/Release-iphoneos"
+          cd "$APP_DIR"
+          mkdir -p Payload
+          cp -R Flux.app Payload/
+          zip -qry Flux.ipa Payload
+      - name: Upload the IPA for sideloading
         uses: actions/upload-artifact@v4
         with:
-          name: ios-app-unsigned
-          path: iosApp/build/device/Build/Products/Release-iphoneos/Flux.app
+          name: ios-app-ipa
+          path: iosApp/build/device/Build/Products/Release-iphoneos/Flux.ipa
           if-no-files-found: error
           retention-days: 7
