@@ -4,6 +4,7 @@ package org.omarchy.flux.net
 
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.UIntVar
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped
@@ -16,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
 import platform.posix.AF_INET
 import platform.posix.SOCK_DGRAM
 import platform.posix.SOL_SOCKET
