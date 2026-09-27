@@ -4,6 +4,7 @@ package org.omarchy.flux.net
 
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.UIntVar
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
 import kotlinx.cinterop.memScoped

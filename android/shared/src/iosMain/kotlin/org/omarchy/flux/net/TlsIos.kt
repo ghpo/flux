@@ -4,11 +4,16 @@ package org.omarchy.flux.net
 
 import kotlinx.cinterop.Arena
 import kotlinx.cinterop.ByteVar
-import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.CPointerVarOf
+import kotlinx.cinterop.CPointed
+import kotlinx.cinterop.CValuesRef
+import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.LongVar
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.convert
+import kotlinx.cinterop.cValuesOf
 import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.plus
@@ -16,7 +21,6 @@ import kotlinx.cinterop.ptr
 import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.set
-import kotlinx.cinterop.sizeOf
 import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
@@ -26,12 +30,11 @@ import platform.CoreFoundation.CFArrayGetValueAtIndex
 import platform.CoreFoundation.CFDataGetBytePtr
 import platform.CoreFoundation.CFDataGetLength
 import platform.CoreFoundation.CFRelease
-import platform.CoreFoundation.CFTypeRef
 import platform.CoreFoundation.kCFAllocatorDefault
 import platform.Security.SSLCopyPeerTrust
 import platform.Security.SSLCreateContext
-import platform.Security.SSLConnectionType
 import platform.Security.SSLConnectionRef
+import platform.Security.SSLConnectionType
 import platform.Security.SSLContextRef
 import platform.Security.SSLHandshake
 import platform.Security.SSLProtocolSide
@@ -42,8 +45,8 @@ import platform.Security.SSLSetConnection
 import platform.Security.SSLSetIOFuncs
 import platform.Security.SSLSetSessionOption
 import platform.Security.SSLWrite
-import platform.Security.SecCertificateCreateWithData
 import platform.Security.SecCertificateCopyData
+import platform.Security.SecCertificateCreateWithData
 import platform.Security.SecCertificateRef
 import platform.Security.SecIdentityCreate
 import platform.Security.SecIdentityRef
@@ -60,9 +63,9 @@ import platform.Security.kSecAttrKeyType
 import platform.Security.kSecAttrKeyTypeRSA
 import platform.Security.kSSLSessionOptionBreakOnClientAuth
 import platform.Security.kSSLSessionOptionBreakOnServerAuth
-import platform.Security.kSSLAuthenticate
-import platform.Security.kSSLStreamType
-import platform.Security.noErr
+import platform.Security.kTryAuthenticate
+import platform.darwin.OSStatus
+import platform.darwin.noErr
 import platform.posix.EAGAIN
 import platform.posix.EWOULDBLOCK
 import platform.posix.errno
@@ -70,7 +73,7 @@ import platform.posix.recv
 import platform.posix.send
 import platform.posix.size_tVar
 
-private const val IO_ERROR = -36
+private const val IO_ERROR: OSStatus = (-36).convert()
 
 actual fun wrapTls(
     socket: Stream,
@@ -92,25 +95,29 @@ actual fun wrapTls(
     SSLSetConnection(ctx, fdVar.ptr)
     SSLSetIOFuncs(ctx, staticCFunction(::sslReadCallback), staticCFunction(::sslWriteCallback))
 
-    val certs = CFArrayCreate(kCFAllocatorDefault, arena.allocArray(1) { identity }.ptr.reinterpret(), 1, null)
+    val certs = CFArrayCreate(
+        null,
+        cValuesOf(identity) as CValuesRef<CPointerVarOf<CPointer<out CPointed>>>,
+        1,
+        null,
+    )
     SSLSetCertificate(ctx, certs)
+    CFRelease(certs)
 
     if (server) {
-        SSLSetClientSideAuthenticate(ctx, kSSLAuthenticate)
+        SSLSetClientSideAuthenticate(ctx, kTryAuthenticate)
         SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnClientAuth, true)
     } else {
         SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnServerAuth, true)
     }
 
-    val ok = handshake(ctx)
-    if (!ok) {
-        CFRelease(ctx)
+    if (!handshake(ctx)) {
+        platform.Security.SSLClose(ctx)
         arena.clear()
         error("TLS handshake failed")
     }
 
     val peer = peerCertificate(ctx) ?: error("no peer certificate")
-
     return SecureTransportLink(ctx, fd, peer, arena)
 }
 
@@ -126,9 +133,10 @@ private class SecureTransportLink(
             memScoped {
                 val processed = alloc<size_tVar>()
                 val status = SSLRead(ctx, pinned.addressOf(offset), length.convert(), processed.ptr)
-                if (status == errSSLClosedGraceful || status == 0) return@memScoped if (status == 0) processed.value.toInt() else -1
-                if (status != noErr) return@memScoped -1
-                processed.value.toInt()
+                when (status) {
+                    errSSLClosedGraceful -> -1
+                    else -> processed.value.toInt()
+                }
             }
         }
     }
@@ -215,14 +223,11 @@ private fun ByteArray.toCFDataRef() = usePinned { pinned ->
     platform.CoreFoundation.CFDataCreate(null, pinned.addressOf(0).reinterpret(), size.toLong())
 }
 
-// The two SecureTransport IO callbacks. They read and write the raw socket,
-// which is stored in the connection pointer as a LongVar.
-
 private fun sslReadCallback(
     connection: SSLConnectionRef?,
     data: COpaquePointer?,
     dataLength: CPointer<size_tVar>?,
-): platform.darwin.OSStatus {
+): OSStatus {
     val fd = connection!!.reinterpret<LongVar>()!!.get(0).toInt()
     val requested = dataLength!!.get(0).toInt()
     val out = data!!.reinterpret<ByteVar>()
@@ -231,7 +236,7 @@ private fun sslReadCallback(
         val n = recv(fd, out.plus(total), (requested - total).convert(), 0).toInt()
         if (n <= 0) {
             dataLength.set(0, total.convert())
-            return if (n == 0) errSSLClosedGraceful else IO_ERROR.convert()
+            return if (n == 0) errSSLClosedGraceful else IO_ERROR
         }
         total += n
     }
@@ -243,7 +248,7 @@ private fun sslWriteCallback(
     connection: SSLConnectionRef?,
     data: COpaquePointer?,
     dataLength: CPointer<size_tVar>?,
-): platform.darwin.OSStatus {
+): OSStatus {
     val fd = connection!!.reinterpret<LongVar>()!!.get(0).toInt()
     val requested = dataLength!!.get(0).toInt()
     val src = data!!.reinterpret<ByteVar>()
@@ -252,7 +257,7 @@ private fun sslWriteCallback(
         val n = send(fd, src.plus(total), (requested - total).convert(), 0).toInt()
         if (n < 0) {
             dataLength.set(0, total.convert())
-            return if (errno == EAGAIN || errno == EWOULDBLOCK) errSSLWouldBlock else IO_ERROR.convert()
+            return if (errno == EAGAIN || errno == EWOULDBLOCK) errSSLWouldBlock else IO_ERROR
         }
         total += n
     }
