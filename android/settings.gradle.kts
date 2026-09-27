@@ -35,3 +35,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "flux"
 include(":app")
+include(":shared")

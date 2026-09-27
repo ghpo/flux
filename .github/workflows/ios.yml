@@ -1,0 +1,37 @@
+name: iOS
+
+on:
+  push:
+    branches: [ios, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shared:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      # The whole Gradle build configures :app too, so the Android SDK must be
+      # present even though this job only compiles :shared.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-36 build-tools;36.0.0
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run the shared JVM tests
+        run: ./gradlew :shared:jvmTest --no-daemon
+      - name: Compile the shared module for the iOS device
+        run: ./gradlew :shared:compileKotlinIosArm64 --no-daemon --stacktrace
+      - name: Compile the shared module for the iOS simulator
+        run: ./gradlew :shared:compileKotlinIosSimulatorArm64 --no-daemon --stacktrace
