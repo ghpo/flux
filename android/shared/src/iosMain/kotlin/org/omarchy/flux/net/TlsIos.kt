@@ -31,6 +31,7 @@ import platform.CoreFoundation.CFDataGetBytePtr
 import platform.CoreFoundation.CFDataGetLength
 import platform.CoreFoundation.CFRelease
 import platform.Security.SSLCopyPeerTrust
+import platform.Security.SSLAuthenticate
 import platform.Security.SSLCreateContext
 import platform.Security.SSLConnectionRef
 import platform.Security.SSLConnectionType
@@ -44,10 +45,9 @@ import platform.Security.SSLSetConnection
 import platform.Security.SSLSetIOFuncs
 import platform.Security.SSLSetSessionOption
 import platform.Security.SSLWrite
-import platform.Security.SecCertificate
 import platform.Security.SecCertificateCopyData
 import platform.Security.SecCertificateCreateWithData
-import platform.Security.SecIdentityCreate
+import platform.Security.SecCertificateRef
 import platform.Security.SecIdentityRef
 import platform.Security.SecKeyCreateWithData
 import platform.Security.SecTrustCopyCertificateChain
@@ -62,8 +62,8 @@ import platform.Security.kSecAttrKeyType
 import platform.Security.kSecAttrKeyTypeRSA
 import platform.Security.kSSLSessionOptionBreakOnClientAuth
 import platform.Security.kSSLSessionOptionBreakOnServerAuth
-import platform.Security.noErr
 import platform.darwin.OSStatus
+import platform.darwin.noErr
 import platform.posix.EAGAIN
 import platform.posix.EWOULDBLOCK
 import platform.posix.errno
@@ -79,7 +79,6 @@ private val SSL_CLIENT_AUTH: OSStatus = errSSLClientAuthCompleted.toInt()
 private val SSL_CLOSED_GRACEFUL: OSStatus = errSSLClosedGraceful.toInt()
 
 // kAlwaysAuthenticate: require a client certificate, like the JVM needClientAuth.
-private const val REQUIRE_CLIENT_CERT = 1
 
 actual fun wrapTls(
     socket: Stream,
@@ -111,7 +110,7 @@ actual fun wrapTls(
     CFRelease(certs)
 
     if (server) {
-        SSLSetClientSideAuthenticate(ctx, REQUIRE_CLIENT_CERT)
+        SSLSetClientSideAuthenticate(ctx, SSLAuthenticate.kAlwaysAuthenticate)
         SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnClientAuth, true)
     } else {
         SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnServerAuth, true)
@@ -207,7 +206,8 @@ private fun peerCertificate(ctx: SSLContextRef): ByteArray? = memScoped {
     val chain = SecTrustCopyCertificateChain(trust) ?: return@memScoped null
     try {
         if (CFArrayGetCount(chain) <= 0L) return@memScoped null
-        val leaf = CFArrayGetValueAtIndex(chain, 0)?.reinterpret<SecCertificate>() ?: return@memScoped null
+        val leafValue = CFArrayGetValueAtIndex(chain, 0) ?: return@memScoped null
+        val leaf: SecCertificateRef = leafValue.reinterpret()
         val data = SecCertificateCopyData(leaf) ?: return@memScoped null
         try {
             val length = CFDataGetLength(data).toInt()
