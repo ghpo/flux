@@ -8,7 +8,10 @@ package org.omarchy.flux.net
 import kotlinx.cinterop.ObjCSignatureOverride
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
+import platform.CoreFoundation.CFDataCreate
+import platform.Foundation.CFBridgingRelease
 import platform.Foundation.NSData
 import platform.Foundation.NSDefaultRunLoopMode
 import platform.Foundation.NSNetService
@@ -133,7 +136,8 @@ private fun createTxtData(attributes: Map<String, String>): NSData {
 }
 
 private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
-    NSData(bytes = pinned.addressOf(0), length = size.toULong())
+    val cfData = CFDataCreate(null, pinned.addressOf(0).reinterpret(), size.toLong())!!
+    CFBridgingRelease(cfData) as NSData
 }
 
 private fun NSData.toByteArray(): ByteArray = bytes?.readBytes(length.toInt()) ?: ByteArray(0)
