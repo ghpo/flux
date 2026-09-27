@@ -34,9 +34,6 @@ expect object localCertificateStore {
 /** Returns the SHA-256 digest of [data]. */
 expect fun sha256(data: ByteArray): ByteArray
 
-/** Returns the current time in milliseconds since the Unix epoch. */
-expect fun currentTimeMillis(): Long
-
 /** Returns the CN of the certificate subject. */
 fun commonName(certificateDer: ByteArray): String? {
     val dn = localCertificateStore.parseCertificate(certificateDer).subjectRfc2253 ?: return null
@@ -58,7 +55,7 @@ fun verificationKey(own: ByteArray, peer: ByteArray, timestamp: Long): String {
     if (compareBytes(a, b) < 0) {
         val t = a; a = b; b = t
     }
-    val md = sha256(a + b + if (timestamp > 0) timestamp.toString().toByteArray() else ByteArray(0))
+    val md = sha256(a + b + if (timestamp > 0) timestamp.toString().encodeToByteArray() else ByteArray(0))
     return md.toHex().substring(0, 8).uppercase()
 }
 
