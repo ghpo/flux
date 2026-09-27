@@ -6,18 +6,16 @@
 package org.omarchy.flux.net
 
 import kotlinx.cinterop.ObjCSignatureOverride
-import kotlinx.cinterop.allocArrayOf
-import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.usePinned
 import platform.Foundation.NSData
 import platform.Foundation.NSDefaultRunLoopMode
-import platform.Foundation.NSMutableData
 import platform.Foundation.NSNetService
 import platform.Foundation.NSNetServiceBrowser
 import platform.Foundation.NSNetServiceBrowserDelegateProtocol
 import platform.Foundation.NSNetServiceDelegateProtocol
 import platform.Foundation.NSRunLoop
-import platform.Foundation.appendData
 import platform.darwin.NSObject
 
 private const val SERVICE_TYPE = "_kdeconnect._udp"
@@ -124,18 +122,18 @@ private class ResolveDelegate(
 }
 
 private fun createTxtData(attributes: Map<String, String>): NSData {
-    val data = NSMutableData()
+    val out = ArrayList<Byte>()
     for ((key, value) in attributes) {
         val record = "$key=$value".encodeToByteArray()
         if (record.size > 255) continue
-        data.appendData(byteArrayOf(record.size.toByte()).toNSData())
-        data.appendData(record.toNSData())
+        out.add(record.size.toByte())
+        for (b in record) out.add(b)
     }
-    return data
+    return out.toByteArray().toNSData()
 }
 
-private fun ByteArray.toNSData(): NSData = memScoped {
-    NSData.create(bytes = allocArrayOf(this@toNSData), length = this@toNSData.size.toULong())
+private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
+    NSData(bytes = pinned.addressOf(0), length = size.toULong())
 }
 
 private fun NSData.toByteArray(): ByteArray = bytes?.readBytes(length.toInt()) ?: ByteArray(0)
