@@ -57,14 +57,12 @@ class LinkTest {
             identity = { port -> Identity.self(phone.deviceId, "iPhone", port) },
             onLink = { phoneLinks.add(it) },
             trustedCertificate = { null },
-            hasLink = { false },
         )
         val pcBackend = LanBackend(
             localCertificate = pc,
             identity = { port -> Identity.self(pc.deviceId, "PC", port) },
             onLink = { pcLinks.add(it) },
             trustedCertificate = { null },
-            hasLink = { false },
         )
 
         phoneBackend.start()

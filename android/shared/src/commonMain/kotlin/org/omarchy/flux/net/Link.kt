@@ -6,9 +6,16 @@ import kotlinx.coroutines.launch
 import kotlin.concurrent.Volatile
 import org.omarchy.flux.protocol.Identity
 import org.omarchy.flux.protocol.Packet
+import org.omarchy.flux.protocol.currentTimeMillis
 
 /** The largest packet line that Flux reads. */
 const val MAX_LINE = 16 * 1024 * 1024
+
+/**
+ * The time in which a second link to the same device counts as a
+ * simultaneous connection and not as a reconnect.
+ */
+const val RACE_WINDOW_MS = 5_000L
 
 /**
  * An open TLS link to one device. It frames the newline-separated packets
@@ -18,6 +25,8 @@ class Link(
     private val transport: ConnectedLink,
     val identity: Identity,
     val peerCertificate: ByteArray,
+    val outgoing: Boolean,
+    val startedAt: Long = currentTimeMillis(),
 ) {
     private val scope = CoroutineScope(SupervisorJob() + blockingDispatcher)
     @Volatile private var closed = false
@@ -51,6 +60,19 @@ class Link(
         closed = true
         runCatching { transport.close() }
     }
+}
+
+/**
+ * Picks the link to keep when two links to the same device exist at the same
+ * time. Each side keeps the link that the device with the larger ID opened,
+ * so both sides keep the same socket. After the race window, the new link
+ * wins, because the old socket can be dead without an error.
+ */
+fun preferred(old: Link, next: Link, selfId: String): Link {
+    if (currentTimeMillis() - old.startedAt > RACE_WINDOW_MS) return next
+    val opener = { l: Link -> if (l.outgoing) selfId else l.identity.deviceId }
+    val larger = maxOf(selfId, next.identity.deviceId)
+    return if (opener(old) == larger && opener(next) != larger) old else next
 }
 
 /**

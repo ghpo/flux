@@ -13,6 +13,7 @@ import org.omarchy.flux.net.UDP_PORT
 import org.omarchy.flux.net.blockingDispatcher
 import org.omarchy.flux.net.lanDiscovery
 import org.omarchy.flux.net.mdnsService
+import org.omarchy.flux.net.preferred
 import org.omarchy.flux.protocol.Identity
 import org.omarchy.flux.protocol.LocalCertificate
 import org.omarchy.flux.protocol.Packet
@@ -70,7 +71,6 @@ class Flux(private val dir: String, private val deviceName: String) {
             identity = ::identity,
             onLink = { attach(it) },
             trustedCertificate = { id -> trust.get(id)?.let { t -> runCatching { TrustStore.decodeCert(t.certificate) }.getOrNull() } },
-            hasLink = { id -> lock.withLock { devices[id]?.online == true } },
             tcpPorts = tcpPorts,
         )
         backend = b
@@ -100,11 +100,13 @@ class Flux(private val dir: String, private val deviceName: String) {
                 val packet = Packet.parse(line) ?: return
                 val id = Identity.from(packet) ?: return
                 if (id.deviceId == local.deviceId || id.tcpPort <= 0) return
-                locked {
+                val online = locked {
                     val d = devices.getOrPut(id.deviceId) { Device(this@Flux, id) }
                     d.identity = id
                     d.lastIp = address
+                    d.online
                 }
+                if (online) return
                 b.connect(address, id.tcpPort, id)
             }
         }, udpPort)
@@ -150,9 +152,14 @@ class Flux(private val dir: String, private val deviceName: String) {
             val id = link.identity.deviceId
             val existing = devices[id]
             val old = existing?.link
-            if (old != null && old.isOpen && old !== link && !old.peerCertificate.contentEquals(link.peerCertificate)) {
-                link.close()
-                return@locked
+            if (old != null && old.isOpen && old !== link) {
+                // Each side connected at the same time. Keep the link that
+                // the larger device ID opened, like fluxd, so both sides keep
+                // the same socket.
+                if (preferred(old, link, local.deviceId) === old) {
+                    link.close()
+                    return@locked
+                }
             }
             val d = existing ?: Device(this, link.identity).also { devices[id] = it }
             d.identity = link.identity

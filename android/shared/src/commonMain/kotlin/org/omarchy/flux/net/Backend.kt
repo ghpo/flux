@@ -20,7 +20,6 @@ class LanBackend(
     private val identity: (tcpPort: Int) -> Identity,
     private val onLink: (Link) -> Unit,
     private val trustedCertificate: (deviceId: String) -> ByteArray?,
-    private val hasLink: (deviceId: String) -> Boolean,
     private val tcpPorts: IntRange = TCP_PORTS,
 ) {
     var tcpPort = 0
@@ -52,7 +51,7 @@ class LanBackend(
                 socket = tcpConnect(address, port)
                 socket.write(identity(0).toPacket(target = udpIdentity).serialize().encodeToByteArray())
                 val tls = wrapTls(socket, server = true, localCertificate.certificate, localCertificate.privateKey)
-                finish(tls, udpIdentity)
+                finish(tls, udpIdentity, outgoing = true)
             } catch (e: Exception) {
                 runCatching { socket?.close() }
             }
@@ -79,7 +78,7 @@ class LanBackend(
             val target = packet.string("targetDeviceId")
             if (target != null && target != localCertificate.deviceId) throw IllegalStateException("identity is for $target")
             val tls = wrapTls(socket, server = false, localCertificate.certificate, localCertificate.privateKey)
-            finish(tls, plain)
+            finish(tls, plain, outgoing = false)
         } catch (e: Exception) {
             runCatching { socket.close() }
         }
@@ -89,7 +88,7 @@ class LanBackend(
      * Checks the peer certificate and, for protocol version 8, exchanges the
      * identity again over TLS. The identity inside TLS is the one to trust.
      */
-    private fun finish(tls: ConnectedLink, plain: Identity?) {
+    private fun finish(tls: ConnectedLink, plain: Identity?, outgoing: Boolean) {
         val certDer = tls.peerCertificate()
         val cn = commonName(certDer)
         var id = plain
@@ -106,7 +105,6 @@ class LanBackend(
         if (pinned != null && !pinned.contentEquals(certDer)) {
             throw IllegalStateException("${id.deviceName} presented a different certificate")
         }
-        if (hasLink(deviceId)) throw IllegalStateException("already connected to $deviceId")
-        onLink(Link(tls, id, certDer))
+        onLink(Link(tls, id, certDer, outgoing))
     }
 }
