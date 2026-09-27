@@ -35,3 +35,30 @@ jobs:
         run: ./gradlew :shared:compileKotlinIosArm64 --no-daemon --stacktrace
       - name: Compile the shared module for the iOS simulator
         run: ./gradlew :shared:compileKotlinIosSimulatorArm64 --no-daemon --stacktrace
+      - name: Build the iOS app for the simulator
+        working-directory: ${{ github.workspace }}
+        run: |
+          xcodebuild -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath iosApp/build/simulator \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Build the iOS app for the device (unsigned)
+        working-directory: ${{ github.workspace }}
+        run: |
+          xcodebuild -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath iosApp/build/device \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Upload the unsigned app
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-app-unsigned
+          path: iosApp/build/device/Build/Products/Release-iphoneos/Flux.app
+          if-no-files-found: error
+          retention-days: 7

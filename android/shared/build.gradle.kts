@@ -14,9 +14,13 @@ kotlin {
     jvm()
 
     if (hostIsMac) {
-        iosX64()
-        iosArm64()
-        iosSimulatorArm64()
+        val iosTargets = listOf(iosX64(), iosArm64(), iosSimulatorArm64())
+        iosTargets.forEach { target ->
+            target.binaries.framework {
+                baseName = "Shared"
+                isStatic = true
+            }
+        }
     }
 
     sourceSets {
