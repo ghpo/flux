@@ -83,9 +83,9 @@ actual fun loadOrCreateCertificate(dir: String): LocalCertificate {
 private fun rsaKeyAttributes(bits: Int): CFDictionaryRef? = memScoped {
     val dict = CFDictionaryCreateMutable(null, 2, null, null)
     CFDictionaryAddValue(dict, kSecAttrKeyType, kSecAttrKeyTypeRSA)
-    val sizePtr = alloc<IntVar>()
-    sizePtr.pointed.value = bits
-    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, sizePtr)
+    val sizeVar = alloc<IntVar>()
+    sizeVar.value = bits
+    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, sizeVar.ptr)
     CFDictionaryAddValue(dict, kSecAttrKeySizeInBits, sizeNumber)
     dict
 }
