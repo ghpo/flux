@@ -49,7 +49,7 @@ class LanBackend(
             var socket: Stream? = null
             try {
                 socket = tcpConnect(address, port)
-                socket.write(identity(0).toPacket(target = udpIdentity).serialize().toByteArray())
+                socket.write(identity(0).toPacket(target = udpIdentity).serialize().encodeToByteArray())
                 val tls = wrapTls(socket, server = true, localCertificate.certificate, localCertificate.privateKey)
                 finish(tls, udpIdentity)
             } catch (e: Exception) {
@@ -93,7 +93,7 @@ class LanBackend(
         val cn = commonName(certDer)
         var id = plain
         if (plain == null || plain.protocolVersion >= 8) {
-            tls.write(identity(0).toPacket().serialize().toByteArray())
+            tls.write(identity(0).toPacket().serialize().encodeToByteArray())
             val line = readLine(tls) ?: throw IllegalStateException("no identity after TLS")
             id = Packet.parse(line)?.let { Identity.from(it) } ?: throw IllegalStateException("bad identity after TLS")
             if (plain != null && plain.deviceId != id.deviceId) throw IllegalStateException("device ID changed after TLS")

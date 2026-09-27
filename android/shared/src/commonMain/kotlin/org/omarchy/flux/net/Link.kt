@@ -41,7 +41,7 @@ class Link(
 
     fun send(packet: Packet) {
         if (closed) return
-        runCatching { transport.write(packet.serialize().toByteArray()) }
+        runCatching { transport.write(packet.serialize().encodeToByteArray()) }
     }
 
     fun close() {
