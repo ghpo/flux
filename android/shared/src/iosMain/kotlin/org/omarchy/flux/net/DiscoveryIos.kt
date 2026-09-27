@@ -34,7 +34,7 @@ import platform.posix.socket
 private class IosLanDiscovery(private val listener: DiscoveryListener, private val port: Int) : LanDiscovery {
     private var fd: Int = -1
     @Volatile private var running = false
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun start(identityLine: () -> String) {
         if (running) return

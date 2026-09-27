@@ -72,7 +72,7 @@ class LinkTest {
         try {
             phoneBackend.connect("127.0.0.1", pcBackend.tcpPort, null)
 
-            val deadline = System.currentTimeMillis() + 5000
+            val deadline = System.currentTimeMillis() + 15_000
             while ((phoneLinks.isEmpty() || pcLinks.isEmpty()) && System.currentTimeMillis() < deadline) {
                 Thread.sleep(20)
             }

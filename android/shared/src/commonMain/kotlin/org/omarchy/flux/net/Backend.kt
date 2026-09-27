@@ -26,7 +26,7 @@ class LanBackend(
     var tcpPort = 0
         private set
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var running = false
     private var server: TcpServer? = null
 

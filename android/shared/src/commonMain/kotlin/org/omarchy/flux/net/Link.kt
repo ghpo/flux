@@ -20,7 +20,7 @@ class Link(
     val identity: Identity,
     val peerCertificate: ByteArray,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var closed = false
 
     /** Starts the read loop. [onPacket] runs on the reader coroutine. */
