@@ -47,7 +47,7 @@ jobs:
             -derivedDataPath iosApp/build/simulator \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
-      - name: Build the iOS app for the device (unsigned)
+      - name: Build the iOS app for the device (ad-hoc signed)
         working-directory: ${{ github.workspace }}
         run: |
           xcodebuild -project iosApp/iosApp.xcodeproj \
@@ -55,9 +55,12 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath iosApp/build/device \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             build
-      - name: Package the unsigned app into an IPA
+      - name: Package the app into an IPA
         working-directory: ${{ github.workspace }}
         run: |
           APP_DIR="iosApp/build/device/Build/Products/Release-iphoneos"
