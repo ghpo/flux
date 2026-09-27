@@ -3,7 +3,7 @@
 package org.omarchy.flux.protocol
 
 import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.cValue
+import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
@@ -83,7 +83,9 @@ actual fun loadOrCreateCertificate(dir: String): LocalCertificate {
 private fun rsaKeyAttributes(bits: Int): CFDictionaryRef? = memScoped {
     val dict = CFDictionaryCreateMutable(null, 2, null, null)
     CFDictionaryAddValue(dict, kSecAttrKeyType, kSecAttrKeyTypeRSA)
-    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, cValue<IntVar> { value = bits })
+    val sizePtr = alloc<IntVar>()
+    sizePtr.pointed.value = bits
+    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, sizePtr)
     CFDictionaryAddValue(dict, kSecAttrKeySizeInBits, sizeNumber)
     dict
 }
@@ -103,7 +105,7 @@ private fun CFDataRef?.toByteArray(): ByteArray {
 }
 
 private fun ByteArray.toCFData(): CFDataRef? = usePinned { pinned ->
-    CFDataCreate(null, pinned.addressOf(0), size.toLong())
+    CFDataCreate(null, pinned.addressOf(0).reinterpret<UByteVar>(), size.toLong())
 }
 
 private fun writeFile(path: String, data: ByteArray) {
