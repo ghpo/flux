@@ -29,6 +29,9 @@ kotlin {
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.coroutines.core)
         }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
         jvmTest.dependencies {
             implementation(libs.junit)
         }
