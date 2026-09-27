@@ -8,7 +8,6 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.readBytes
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
-import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.UByteVar
 import platform.CoreFoundation.CFDataCreate
 import platform.CoreFoundation.CFDataGetBytePtr
@@ -18,7 +17,8 @@ import platform.CoreFoundation.CFDictionaryCreateMutable
 import platform.CoreFoundation.CFNumberCreate
 import platform.CoreFoundation.CFDataRef
 import platform.CoreFoundation.CFDictionaryRef
-import platform.CoreFoundation.kCFNumberSInt32Type
+import platform.CoreFoundation.kCFAllocatorDefault
+import platform.CoreFoundation.kCFNumberIntType
 import platform.Foundation.NSUUID
 import platform.Security.SecKeyCopyExternalRepresentation
 import platform.Security.SecKeyCopyPublicKey
@@ -40,6 +40,7 @@ import platform.posix.fwrite
 import platform.posix.mkdir
 import platform.posix.SEEK_END
 import platform.posix.SEEK_SET
+import platform.posix.int32_tVar
 
 private const val KEY_FILE = "privateKey.der"
 private const val CERT_FILE = "certificate.der"
@@ -83,9 +84,8 @@ actual fun loadOrCreateCertificate(dir: String): LocalCertificate {
 private fun rsaKeyAttributes(bits: Int): CFDictionaryRef? = memScoped {
     val dict = CFDictionaryCreateMutable(null, 2, null, null)
     CFDictionaryAddValue(dict, kSecAttrKeyType, kSecAttrKeyTypeRSA)
-    val sizeVar = alloc<IntVar>()
-    sizeVar.value = bits
-    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, sizeVar.ptr)
+    val sizeVar = alloc<int32_tVar>().apply { value = bits }
+    val sizeNumber = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, sizeVar.ptr)
     CFDictionaryAddValue(dict, kSecAttrKeySizeInBits, sizeNumber)
     dict
 }
