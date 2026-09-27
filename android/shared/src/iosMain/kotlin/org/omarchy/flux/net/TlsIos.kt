@@ -65,6 +65,7 @@ import platform.Security.kSSLSessionOptionBreakOnClientAuth
 import platform.Security.kSSLSessionOptionBreakOnServerAuth
 import platform.darwin.OSStatus
 import platform.darwin.noErr
+import org.omarchy.flux.protocol.unwrapPkcs8
 import platform.posix.EAGAIN
 import platform.posix.EWOULDBLOCK
 import platform.posix.errno
@@ -189,7 +190,7 @@ private fun handshake(ctx: SSLContextRef): Boolean {
 
 private fun createIdentity(certificate: ByteArray, privateKey: ByteArray): SecIdentityRef? = memScoped {
     val cert = SecCertificateCreateWithData(null, certificate.toCFDataRef()) ?: return@memScoped null
-    val key = SecKeyCreateWithData(privateKey.toCFDataRef(), privateKeyAttributes(), null) ?: return@memScoped null
+    val key = SecKeyCreateWithData(unwrapPkcs8(privateKey).toCFDataRef(), privateKeyAttributes(), null) ?: return@memScoped null
     SecIdentityCreate(null, cert, key)
 }
 
