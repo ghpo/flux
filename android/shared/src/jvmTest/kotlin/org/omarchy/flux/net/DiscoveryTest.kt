@@ -17,8 +17,12 @@ class DiscoveryTest {
         val received = arrayOfNulls<String>(1)
         val discovery = lanDiscovery(object : DiscoveryListener {
             override fun onDatagram(line: String, address: String) {
-                received[0] = line
-                latch.countDown()
+                // The start() broadcast can loop back on some platforms, so
+                // only the datagram we send below counts.
+                if (line == "hello-flux") {
+                    received[0] = line
+                    latch.countDown()
+                }
             }
         }, port)
         discovery.start { "identity-line" }
