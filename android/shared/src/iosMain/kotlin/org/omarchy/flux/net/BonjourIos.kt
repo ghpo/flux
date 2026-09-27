@@ -14,6 +14,7 @@ import platform.CoreFoundation.CFDataCreate
 import platform.Foundation.CFBridgingRelease
 import platform.Foundation.NSData
 import platform.Foundation.NSDefaultRunLoopMode
+import platform.Foundation.NSLog
 import platform.Foundation.NSNetService
 import platform.Foundation.NSNetServiceBrowser
 import platform.Foundation.NSNetServiceBrowserDelegateProtocol
@@ -25,16 +26,22 @@ private const val SERVICE_TYPE = "_kdeconnect._udp"
 
 private class BonjourMdns : MdnsService {
     private var service: NSNetService? = null
+    private var publishDelegate: PublishDelegate? = null
     private var browser: NSNetServiceBrowser? = null
     private var browserDelegate: BonjourBrowserDelegate? = null
 
     override fun publish(deviceId: String, port: Int, txt: Map<String, String>) {
         service?.stop()
+        NSLog("flux mDNS publish id=$deviceId port=$port")
         val s = NSNetService(domain = "local.", type = SERVICE_TYPE, name = deviceId, port = port)
+        val d = PublishDelegate(deviceId)
+        s.delegate = d
         s.setTXTRecordData(createTxtData(txt))
         s.includesPeerToPeer = true
+        s.scheduleInRunLoop(NSRunLoop.mainRunLoop, NSDefaultRunLoopMode)
         s.publish()
         service = s
+        publishDelegate = d
     }
 
     override fun browse(callback: (MdnsPeer) -> Unit) {
@@ -53,6 +60,7 @@ private class BonjourMdns : MdnsService {
         stopBrowse()
         service?.stop()
         service = null
+        publishDelegate = null
     }
 
     private fun stopBrowse() {
@@ -65,6 +73,21 @@ private class BonjourMdns : MdnsService {
 }
 
 actual fun mdnsService(): MdnsService = BonjourMdns()
+
+private class PublishDelegate(private val name: String) : NSObject(), NSNetServiceDelegateProtocol {
+    override fun netServiceDidPublish(sender: NSNetService) {
+        NSLog("flux mDNS published $name")
+    }
+
+    @ObjCSignatureOverride
+    override fun netService(sender: NSNetService, didNotPublish: Map<Any?, *>) {
+        NSLog("flux mDNS didNotPublish $name: $didNotPublish")
+    }
+
+    override fun netServiceDidStop(sender: NSNetService) {
+        NSLog("flux mDNS stopped $name")
+    }
+}
 
 private class BonjourBrowserDelegate(
     private val callback: (MdnsPeer) -> Unit,
