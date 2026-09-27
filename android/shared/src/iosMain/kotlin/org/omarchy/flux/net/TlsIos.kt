@@ -30,7 +30,6 @@ import platform.CoreFoundation.CFArrayGetValueAtIndex
 import platform.CoreFoundation.CFDataGetBytePtr
 import platform.CoreFoundation.CFDataGetLength
 import platform.CoreFoundation.CFRelease
-import platform.CoreFoundation.kCFAllocatorDefault
 import platform.Security.SSLCopyPeerTrust
 import platform.Security.SSLCreateContext
 import platform.Security.SSLConnectionRef
@@ -45,9 +44,9 @@ import platform.Security.SSLSetConnection
 import platform.Security.SSLSetIOFuncs
 import platform.Security.SSLSetSessionOption
 import platform.Security.SSLWrite
+import platform.Security.SecCertificate
 import platform.Security.SecCertificateCopyData
 import platform.Security.SecCertificateCreateWithData
-import platform.Security.SecCertificateRef
 import platform.Security.SecIdentityCreate
 import platform.Security.SecIdentityRef
 import platform.Security.SecKeyCreateWithData
@@ -63,9 +62,8 @@ import platform.Security.kSecAttrKeyType
 import platform.Security.kSecAttrKeyTypeRSA
 import platform.Security.kSSLSessionOptionBreakOnClientAuth
 import platform.Security.kSSLSessionOptionBreakOnServerAuth
-import platform.Security.kTryAuthenticate
+import platform.Security.noErr
 import platform.darwin.OSStatus
-import platform.darwin.noErr
 import platform.posix.EAGAIN
 import platform.posix.EWOULDBLOCK
 import platform.posix.errno
@@ -73,7 +71,15 @@ import platform.posix.recv
 import platform.posix.send
 import platform.posix.size_tVar
 
-private const val IO_ERROR: OSStatus = (-36).convert()
+private val IO_ERROR: OSStatus = -36
+private val NO_ERR: OSStatus = noErr.toInt()
+private val SSL_WOULD_BLOCK: OSStatus = errSSLWouldBlock.toInt()
+private val SSL_SERVER_AUTH: OSStatus = errSSLServerAuthCompleted.toInt()
+private val SSL_CLIENT_AUTH: OSStatus = errSSLClientAuthCompleted.toInt()
+private val SSL_CLOSED_GRACEFUL: OSStatus = errSSLClosedGraceful.toInt()
+
+// kAlwaysAuthenticate: require a client certificate, like the JVM needClientAuth.
+private const val REQUIRE_CLIENT_CERT = 1
 
 actual fun wrapTls(
     socket: Stream,
@@ -105,7 +111,7 @@ actual fun wrapTls(
     CFRelease(certs)
 
     if (server) {
-        SSLSetClientSideAuthenticate(ctx, kTryAuthenticate)
+        SSLSetClientSideAuthenticate(ctx, REQUIRE_CLIENT_CERT)
         SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnClientAuth, true)
     } else {
         SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnServerAuth, true)
@@ -133,10 +139,7 @@ private class SecureTransportLink(
             memScoped {
                 val processed = alloc<size_tVar>()
                 val status = SSLRead(ctx, pinned.addressOf(offset), length.convert(), processed.ptr)
-                when (status) {
-                    errSSLClosedGraceful -> -1
-                    else -> processed.value.toInt()
-                }
+                if (status == NO_ERR) processed.value.toInt() else -1
             }
         }
     }
@@ -148,7 +151,7 @@ private class SecureTransportLink(
                 memScoped {
                     val processed = alloc<size_tVar>()
                     val status = SSLWrite(ctx, pinned.addressOf(sent), (bytes.size - sent).convert(), processed.ptr)
-                    if (status != noErr) return@memScoped -1
+                    if (status != NO_ERR) return@memScoped -1
                     processed.value.toInt()
                 }
             }
@@ -169,13 +172,13 @@ private class SecureTransportLink(
 private fun handshake(ctx: SSLContextRef): Boolean {
     while (true) {
         when (val status = SSLHandshake(ctx)) {
-            noErr -> return true
-            errSSLWouldBlock -> continue
-            errSSLServerAuthCompleted -> {
+            NO_ERR -> return true
+            SSL_WOULD_BLOCK -> continue
+            SSL_SERVER_AUTH -> {
                 SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnServerAuth, false)
                 continue
             }
-            errSSLClientAuthCompleted -> {
+            SSL_CLIENT_AUTH -> {
                 SSLSetSessionOption(ctx, kSSLSessionOptionBreakOnClientAuth, false)
                 continue
             }
@@ -199,12 +202,12 @@ private fun privateKeyAttributes() = memScoped {
 
 private fun peerCertificate(ctx: SSLContextRef): ByteArray? = memScoped {
     val trustVar = alloc<SecTrustRefVar>()
-    if (SSLCopyPeerTrust(ctx, trustVar.ptr) != noErr) return@memScoped null
+    if (SSLCopyPeerTrust(ctx, trustVar.ptr) != NO_ERR) return@memScoped null
     val trust = trustVar.value ?: return@memScoped null
     val chain = SecTrustCopyCertificateChain(trust) ?: return@memScoped null
     try {
         if (CFArrayGetCount(chain) <= 0L) return@memScoped null
-        val leaf = CFArrayGetValueAtIndex(chain, 0)?.reinterpret<SecCertificateRef>() ?: return@memScoped null
+        val leaf = CFArrayGetValueAtIndex(chain, 0)?.reinterpret<SecCertificate>() ?: return@memScoped null
         val data = SecCertificateCopyData(leaf) ?: return@memScoped null
         try {
             val length = CFDataGetLength(data).toInt()
@@ -236,12 +239,12 @@ private fun sslReadCallback(
         val n = recv(fd, out.plus(total), (requested - total).convert(), 0).toInt()
         if (n <= 0) {
             dataLength.set(0, total.convert())
-            return if (n == 0) errSSLClosedGraceful else IO_ERROR
+            return if (n == 0) SSL_CLOSED_GRACEFUL else IO_ERROR
         }
         total += n
     }
     dataLength.set(0, total.convert())
-    return noErr
+    return NO_ERR
 }
 
 private fun sslWriteCallback(
@@ -257,10 +260,10 @@ private fun sslWriteCallback(
         val n = send(fd, src.plus(total), (requested - total).convert(), 0).toInt()
         if (n < 0) {
             dataLength.set(0, total.convert())
-            return if (errno == EAGAIN || errno == EWOULDBLOCK) errSSLWouldBlock else IO_ERROR
+            return if (errno == EAGAIN || errno == EWOULDBLOCK) SSL_WOULD_BLOCK else IO_ERROR
         }
         total += n
     }
     dataLength.set(0, total.convert())
-    return noErr
+    return NO_ERR
 }
