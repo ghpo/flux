@@ -1,9 +1,10 @@
 package org.omarchy.flux.protocol
 
 /**
- * The device identity: its RSA private key as PKCS#8 DER and its self-signed
- * certificate as X.509 DER. The common code holds only the bytes so that the
- * JVM and iOS implementations can use their own crypto backends.
+ * The device identity: its RSA private key and its self-signed certificate.
+ * The common code holds only the bytes so that the JVM and iOS implementations
+ * can use their own crypto backends. The private key is PKCS#8 DER and the
+ * certificate is X.509 DER.
  */
 class LocalCertificate(
     val privateKey: ByteArray,
@@ -14,35 +15,49 @@ class LocalCertificate(
 
     companion object {
         /** Loads the certificate from [dir], generating a new one on first use. */
-        fun loadOrCreate(dir: String): LocalCertificate = localCertificateStore.loadOrCreate(dir)
+        fun loadOrCreate(dir: String): LocalCertificate = loadOrCreateCertificate(dir)
 
         /** Generates a self-signed certificate in the KDE Connect format. */
-        fun generate(deviceId: String): LocalCertificate = localCertificateStore.generate(deviceId)
+        fun generate(deviceId: String): LocalCertificate = generateCertificate(deviceId)
     }
 }
 
 /** A parsed certificate: its RFC 2253 subject and its SubjectPublicKeyInfo DER. */
 class CertificateInfo(val subjectRfc2253: String?, val subjectPublicKeyInfo: ByteArray)
 
-/** Platform certificate operations: key generation, persistence, and parsing. */
-expect object localCertificateStore {
-    fun loadOrCreate(dir: String): LocalCertificate
-    fun generate(deviceId: String): LocalCertificate
-    fun parseCertificate(der: ByteArray): CertificateInfo
-}
+/** An RSA key pair in the portable formats: SPKI and PKCS#8 DER. */
+class RsaKeyPair(val publicKeySpki: ByteArray, val privateKeyPkcs8: ByteArray)
 
 /** Returns the SHA-256 digest of [data]. */
 expect fun sha256(data: ByteArray): ByteArray
 
+/** Generates an RSA key pair of [bits] length. */
+expect fun generateRsaKeyPair(bits: Int = 2048): RsaKeyPair
+
+/** Signs [message] with SHA256withRSA using [privateKeyPkcs8]. */
+expect fun rsaSignSha256(privateKeyPkcs8: ByteArray, message: ByteArray): ByteArray
+
+/** Loads the identity from [dir], generating and writing a new one on first use. */
+expect fun loadOrCreateCertificate(dir: String): LocalCertificate
+
+/** Generates a self-signed certificate with CN set to [deviceId]. */
+fun generateCertificate(deviceId: String): LocalCertificate {
+    val pair = generateRsaKeyPair()
+    val cert = buildSelfSignedRsaCertificate(deviceId, pair.publicKeySpki) { message ->
+        rsaSignSha256(pair.privateKeyPkcs8, message)
+    }
+    return LocalCertificate(pair.privateKeyPkcs8, cert)
+}
+
 /** Returns the CN of the certificate subject. */
 fun commonName(certificateDer: ByteArray): String? {
-    val dn = localCertificateStore.parseCertificate(certificateDer).subjectRfc2253 ?: return null
+    val dn = parseCertificate(certificateDer).subjectRfc2253 ?: return null
     return dn.split(',').map { it.trim() }.firstOrNull { it.startsWith("CN=") }?.removePrefix("CN=")
 }
 
 /** Returns the SubjectPublicKeyInfo DER bytes exactly as the certificate holds them. */
 fun subjectPublicKeyInfo(certificateDer: ByteArray): ByteArray =
-    localCertificateStore.parseCertificate(certificateDer).subjectPublicKeyInfo
+    parseCertificate(certificateDer).subjectPublicKeyInfo
 
 /**
  * Returns the 8-character key that both devices show while they pair. It

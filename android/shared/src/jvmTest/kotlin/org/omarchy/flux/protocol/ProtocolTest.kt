@@ -1,5 +1,11 @@
 package org.omarchy.flux.protocol
 
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.TimeZone
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -103,17 +109,49 @@ class ProtocolTest {
         val id = "0123456789abcdef0123456789abcdef"
         val c = LocalCertificate.generate(id)
         assertEquals(id, c.deviceId)
-        val dn = localCertificateStore.parseCertificate(c.certificate).subjectRfc2253
-        assertTrue(dn!!.contains("O=KDE"))
+        val info = parseCertificate(c.certificate)
+        val dn = info.subjectRfc2253!!
+        assertTrue(dn.contains("CN=$id"))
         assertTrue(dn.contains("OU=KDE Connect"))
-        val spki = subjectPublicKeyInfo(c.certificate)
+        assertTrue(dn.contains("O=KDE"))
+        val spki = info.subjectPublicKeyInfo
         assertTrue(spki.isNotEmpty())
+
+        // The common builder must produce a certificate that the JVM parser
+        // accepts, with a matching subject, key, and self-signature.
+        val x509 = CertificateFactory.getInstance("X.509").generateCertificate(c.certificate.inputStream()) as X509Certificate
+        assertEquals(id, x509.subjectX500Principal.getName().substringAfter("CN=").substringBefore(","))
+        assertTrue(x509.subjectX500Principal.getName().contains("OU=KDE Connect"))
+        assertTrue(x509.subjectX500Principal.getName().contains("O=KDE"))
+        assertArrayEquals(x509.publicKey.encoded, spki)
+        x509.verify(x509.publicKey)
+
         val other = LocalCertificate.generate("fedcba9876543210fedcba9876543210")
         assertFalse(spki.contentEquals(subjectPublicKeyInfo(other.certificate)))
-        val k1 = verificationKey(subjectPublicKeyInfo(c.certificate), subjectPublicKeyInfo(other.certificate), 1790000000)
-        val k2 = verificationKey(subjectPublicKeyInfo(other.certificate), subjectPublicKeyInfo(c.certificate), 1790000000)
+        val k1 = verificationKey(spki, subjectPublicKeyInfo(other.certificate), 1790000000)
+        val k2 = verificationKey(subjectPublicKeyInfo(other.certificate), spki, 1790000000)
         assertEquals(k1, k2)
         assertEquals(8, k1.length)
         assertNotNull(k1.toLongOrNull(16))
+    }
+
+    @Test
+    fun pkcs8RoundTrip() {
+        val pair = generateRsaKeyPair()
+        assertArrayEquals(pair.privateKeyPkcs8, wrapPkcs8(unwrapPkcs8(pair.privateKeyPkcs8)))
+    }
+
+    @Test
+    fun spkiRoundTrip() {
+        val pair = generateRsaKeyPair()
+        assertArrayEquals(pair.publicKeySpki, wrapRsaSpki(unwrapSpki(pair.publicKeySpki)))
+    }
+
+    @Test
+    fun utcTimeMatchesTheJvm() {
+        val fmt = SimpleDateFormat("yyMMddHHmmss'Z'").apply { timeZone = TimeZone.getTimeZone("UTC") }
+        for (millis in listOf(0L, 1735689600000L, 1767225600000L, 1893456000000L)) {
+            assertEquals(fmt.format(Date(millis)), utcTimeString(millis))
+        }
     }
 }

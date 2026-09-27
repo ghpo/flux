@@ -23,10 +23,6 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.serialization.json)
         }
-        jvmMain.dependencies {
-            implementation(libs.bouncycastle)
-            implementation(libs.bouncycastle.pkix)
-        }
         jvmTest.dependencies {
             implementation(libs.junit)
         }
