@@ -7,10 +7,12 @@ import org.omarchy.flux.net.DiscoveryListener
 import org.omarchy.flux.net.LanBackend
 import org.omarchy.flux.net.LanDiscovery
 import org.omarchy.flux.net.Link
+import org.omarchy.flux.net.MdnsService
 import org.omarchy.flux.net.TCP_PORTS
 import org.omarchy.flux.net.UDP_PORT
 import org.omarchy.flux.net.blockingDispatcher
 import org.omarchy.flux.net.lanDiscovery
+import org.omarchy.flux.net.mdnsService
 import org.omarchy.flux.protocol.Identity
 import org.omarchy.flux.protocol.LocalCertificate
 import org.omarchy.flux.protocol.Packet
@@ -37,6 +39,7 @@ class Flux(private val dir: String, private val deviceName: String) {
     private val devices = LinkedHashMap<String, Device>()
     private var discovery: LanDiscovery? = null
     private var backend: LanBackend? = null
+    private var mdns: MdnsService? = null
     private val scope = CoroutineScope(SupervisorJob() + blockingDispatcher)
 
     /** Called after every state change, so the UI can refresh its snapshot. */
@@ -73,6 +76,25 @@ class Flux(private val dir: String, private val deviceName: String) {
         backend = b
         b.start()
         val port = b.tcpPort
+        mdns = mdnsService().also { m ->
+            m.publish(
+                local.deviceId,
+                port,
+                mapOf(
+                    "id" to local.deviceId,
+                    "name" to deviceName,
+                    "type" to "phone",
+                    "protocol" to "8",
+                ),
+            )
+            m.browse { peer ->
+                if (peer.deviceId == local.deviceId || peer.port <= 0) return@browse
+                locked {
+                    val d = devices.getOrPut(peer.deviceId) { Device(this@Flux, Identity(peer.deviceId, peer.name, peer.type, peer.protocol, emptyList(), emptyList())) }
+                    d.lastIp = peer.ip
+                }
+            }
+        }
         discovery = lanDiscovery(object : DiscoveryListener {
             override fun onDatagram(line: String, address: String) {
                 val packet = Packet.parse(line) ?: return
@@ -92,6 +114,8 @@ class Flux(private val dir: String, private val deviceName: String) {
     fun stop() {
         runCatching { discovery?.stop() }
         discovery = null
+        runCatching { mdns?.stop() }
+        mdns = null
         backend?.stop()
         backend = null
         locked { devices.values.forEach { it.link?.close() } }
