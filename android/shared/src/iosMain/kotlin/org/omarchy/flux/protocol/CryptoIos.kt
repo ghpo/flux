@@ -2,12 +2,14 @@
 
 package org.omarchy.flux.protocol
 
-import kotlinx.cinterop.alloc
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.cValue
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.readBytes
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.UByteVar
 import platform.CoreFoundation.CFDataCreate
 import platform.CoreFoundation.CFDataGetBytePtr
 import platform.CoreFoundation.CFDataGetLength
@@ -81,9 +83,7 @@ actual fun loadOrCreateCertificate(dir: String): LocalCertificate {
 private fun rsaKeyAttributes(bits: Int): CFDictionaryRef? = memScoped {
     val dict = CFDictionaryCreateMutable(null, 2, null, null)
     CFDictionaryAddValue(dict, kSecAttrKeyType, kSecAttrKeyTypeRSA)
-    val sizePtr = alloc<IntVar>()
-    sizePtr.pointed.value = bits
-    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, sizePtr)
+    val sizeNumber = CFNumberCreate(null, kCFNumberSInt32Type, cValue<IntVar> { value = bits })
     CFDictionaryAddValue(dict, kSecAttrKeySizeInBits, sizeNumber)
     dict
 }
@@ -110,7 +110,7 @@ private fun writeFile(path: String, data: ByteArray) {
     val file = fopen(path, "wb") ?: error("cannot open $path for writing")
     try {
         data.usePinned { pinned ->
-            fwrite(pinned.addressOf(0), 1uL, data.size.toULong(), file)
+            fwrite(pinned.addressOf(0).reinterpret<UByteVar>(), 1uL, data.size.toULong(), file)
         }
     } finally {
         fclose(file)
@@ -126,7 +126,7 @@ private fun readFile(path: String): ByteArray? {
         if (fseek(file, 0L, SEEK_SET) != 0) return null
         val buffer = ByteArray(size.toInt())
         buffer.usePinned { pinned ->
-            fread(pinned.addressOf(0), 1uL, size.toULong(), file)
+            fread(pinned.addressOf(0).reinterpret<UByteVar>(), 1uL, size.toULong(), file)
         }
         return buffer
     } finally {
