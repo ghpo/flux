@@ -44,6 +44,8 @@ class Link(
         runCatching { transport.write(packet.serialize().encodeToByteArray()) }
     }
 
+    val isOpen: Boolean get() = !closed
+
     fun close() {
         if (closed) return
         closed = true

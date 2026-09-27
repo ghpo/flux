@@ -21,6 +21,7 @@ class LanBackend(
     private val onLink: (Link) -> Unit,
     private val trustedCertificate: (deviceId: String) -> ByteArray?,
     private val hasLink: (deviceId: String) -> Boolean,
+    private val tcpPorts: IntRange = TCP_PORTS,
 ) {
     var tcpPort = 0
         private set
@@ -32,7 +33,7 @@ class LanBackend(
     fun start() {
         if (running) return
         running = true
-        server = openTcpServer(TCP_PORTS)
+        server = openTcpServer(tcpPorts)
         tcpPort = server?.localPort() ?: 0
         scope.launch { acceptLoop() }
     }
